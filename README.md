@@ -118,7 +118,8 @@ python local/export_login.py
 拿这三个文件跟 `src/learn_adapter.py` 顶部的 `PENDING_KEYWORDS` / `NEXT_KEYWORDS` 对一遍，
 把文案改成真实值。改完再手动跑一次正常模式，收到飞书推送就说明通了。
 
-之后每天北京时间 07:30 自动跑，你只在断网、或者登录态过期那几天多看一眼。
+之后每天北京时间 **21:00** 自动跑（本机 Windows 计划任务 `wens-tonghu-auto daily`），
+你只在断网、或者登录态过期那几天多看一眼。
 
 ---
 
@@ -126,7 +127,7 @@ python local/export_login.py
 
 ```
 wens-tonghu-auto/
-├── .github/workflows/daily.yml   # 定时任务（UTC 23:30 = 北京 07:30）
+├── .github/workflows/daily.yml   # 备用（GitHub Actions 路径，已证明不可用，见 DEPLOY.md）
 ├── local/export_login.py         # 本机导出登录态 → 喂给 secret
 ├── src/settings.py               # 配置全走环境变量
 ├── src/browser.py                # 浏览器会话；优先真机 Chrome（编解码器）

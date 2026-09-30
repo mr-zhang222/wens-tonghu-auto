@@ -45,9 +45,23 @@ cmd //c "local\\run_daily.bat"
 **注册成每天自动跑的任务计划**（在 PowerShell 里执行一次，不需要管理员）：
 
 ```powershell
-schtasks /Create /TN "wens-tonghu-auto daily" /SC DAILY /ST 07:30 `
+# 方法一（当前使用的方法，推荐）：Set-ScheduledTask
+$action  = New-ScheduledTaskAction -Execute "C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\run_daily.bat" `
+           -WorkingDirectory "C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto"
+$trigger = New-ScheduledTaskTrigger -Daily -At "21:00"
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName "wens-tonghu-auto daily" -Action $action -Trigger $trigger -Settings $settings -Force
+
+# 方法二（等价写法）：
+schtasks /Create /TN "wens-tonghu-auto daily" /SC DAILY /ST 21:00 `
   /TR "\"C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\run_daily.bat\"" `
   /F
+```
+
+**改时间**（比如从 21:00 改成别的点）：
+
+```powershell
+Set-ScheduledTask -TaskName "wens-tonghu-auto daily" -Trigger (New-ScheduledTaskTrigger -Daily -At "22:30")
 ```
 
 管理它：
@@ -58,10 +72,8 @@ schtasks /Run   /TN "wens-tonghu-auto daily"               # 立刻跑一次
 schtasks /Delete /TN "wens-tonghu-auto daily" /F           # 删除
 ```
 
-> **注意**：任务计划默认"错过了就不跑"。如果你 07:30 电脑没开机，那天就不会执行。
-> 想要补跑，勾选任务的「如果错过计划的开始时间，请尽快启动任务」，
-> 或者把时间设在你基本一定开机的时间点。本项目是**幂等**的，
-> 哪天多跑一次、晚跑一次都不会出错。
+> **注意**：已设置 `-StartWhenAvailable`，所以**错过时间会自动补跑**（比如 21:00 电脑关机，
+> 开机后系统会尽快补上）。本项目是**幂等**的，哪天多跑一次、晚跑一次都不会出错。
 
 **另外两个可行方案**（都需要一台国内常开设备，你没有的话就选上面这个）：
 
@@ -235,7 +247,7 @@ git ls-files | grep -E "login_state|storage_state|artifacts" || echo "干净：�
 看到 **“平台已确认完成”** 就是全通了；若显示“已完成但未确认”，说明服务端还卡真实时长，
 把 `SEEK_STEP_SECONDS` 调到 `2`、`SEEK_INTERVAL_MS` 调到 `1500` 再试。
 
-之后北京时间**每天 07:30** 自动跑（GitHub cron 有排队延迟，属正常，本项目幂等，晚跑不影响）。
+之后北京时间**每天 21:00** 自动跑（本机计划任务，开机即执行；本项目幂等，晚跑不影响）。
 
 ---
 
