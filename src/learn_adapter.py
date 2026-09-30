@@ -42,6 +42,13 @@ LECTURE_DONE_MARKS = ("再次学习", "已学完")
 # 页面加载失败时的自愈入口（这套 SPA 偶发「资源文件加载失败/点击重试」）
 RETRY_HINT = "点击重试"
 
+# 打开入口页的重试策略。
+# ⚠️ 云端 runner 在境外，访问国内企业站可能极慢甚至完全不通 ——
+# 这种情况下「重试」救不了，但能让我们把「网络不通」和「登录态失效」区分开，
+# 不至于把一个网络超时误报成"请重新导出登录态"，把排查方向带偏。
+GOTO_ATTEMPTS = 3
+GOTO_TIMEOUT_MS = 60_000
+
 # 出现这些字说明登录态没了
 LOGIN_HINTS = ("忘记密码", "短信登录", "验证码登录", "扫码登录")
 
@@ -111,6 +118,14 @@ class NotLoggedIn(RuntimeError):
     """登录态失效——需要重跑 local/export_login.py 更新 secret。"""
 
 
+class EntryUnreachable(RuntimeError):
+    """入口页根本打不开（网络超时 / DNS 失败 / 站点不可达）。
+
+    与 NotLoggedIn 严格区分：这不是凭据问题，重跑导出脚本没用。
+    云端 runner 位于境外，访问国内企业站时最常见的就是这一类。
+    """
+
+
 @dataclass
 class Task:
     label: str
@@ -135,8 +150,28 @@ class LearnAdapter:
     # ------------------------------------------------------------ 进出页面
 
     def _goto_entry(self) -> None:
-        self.page.goto(self.settings.entry_url, wait_until="domcontentloaded", timeout=60_000)
-        self.page.wait_for_timeout(3_000)
+        """打开入口页。失败会重试；重试仍失败则抛 EntryUnreachable（而不是 NotLoggedIn）。"""
+        last_error = ""
+        for attempt in range(1, GOTO_ATTEMPTS + 1):
+            try:
+                self.page.goto(
+                    self.settings.entry_url,
+                    wait_until="domcontentloaded",
+                    timeout=GOTO_TIMEOUT_MS,
+                )
+                self.page.wait_for_timeout(3_000)
+                return
+            except Exception as exc:  # noqa: BLE001 - 超时/DNS/连接都被这一类覆盖
+                last_error = f"{type(exc).__name__}: {exc}".splitlines()[0][:200]
+                print(
+                    f"[entry] 第 {attempt}/{GOTO_ATTEMPTS} 次打开入口失败：{last_error}"
+                )
+                if attempt < GOTO_ATTEMPTS:
+                    self.page.wait_for_timeout(3_000)
+        raise EntryUnreachable(
+            f"连不上入口页（已重试 {GOTO_ATTEMPTS} 次）：{self.settings.entry_url}\n"
+            f"最后一次错误：{last_error}"
+        )
 
     def open_entry(self) -> None:
         self._goto_entry()

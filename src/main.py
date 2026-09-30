@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from .browser import browser_page
 from .feishu import send_text
 from .fast_adapter import FastLearnAdapter
-from .learn_adapter import LearnAdapter, NotLoggedIn, TaskResult
+from .learn_adapter import EntryUnreachable, LearnAdapter, NotLoggedIn, TaskResult
 from .seek_adapter import SeekLearnAdapter
 from .settings import Settings, load_settings
 
@@ -150,7 +150,23 @@ def main() -> int:
 
             results = adapter.run()
     except NotLoggedIn as exc:
-        error = f"登录态失效：{exc}"
+        error = (
+            f"登录态失效（凭据问题）：{exc}\n"
+            f"处理办法：在本机重新执行 local/export_login.py，"
+            f"把新的凭据覆盖到 GitHub secret，再手动触发一次。"
+        )
+        exit_code = 1
+    except EntryUnreachable as exc:
+        # 关键区分：这是网络可达性问题，不是凭据问题。
+        # GitHub 的 runner 在境外，国内企业站常常打不开或极慢。
+        error = (
+            f"连不上同呼站点（网络问题，不是登录态问题）：{exc}\n"
+            f"处理办法：先确认这个地址在『运行环境』里能不能访问。\n"
+            f"  · GitHub 托管 runner 位于境外，访问国内站点可能超时或被拦；\n"
+            f"  · 这不是凭据过期，重跑 export_login.py 并覆盖 secret 也不会变好；\n"
+            f"  · 若确认 runner 出网受限，改用国内常开的执行环境"
+            f"（自建/国内服务器的定时任务、青龙面板等）。"
+        )
         exit_code = 1
     except Exception as exc:  # noqa: BLE001
         error = f"运行异常：{type(exc).__name__}: {exc}"

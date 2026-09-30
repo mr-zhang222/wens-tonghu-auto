@@ -46,6 +46,25 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v4
 
+      # 放在最前面：如果 runner 根本连不上同呼，后面装依赖、开浏览器全是白费。
+      # GitHub 托管 runner 位于境外，访问国内企业站可能超时 —— 这一步直接给出答案。
+      - name: 预检目标站连通性
+        run: |
+          echo "===== DNS 解析 ====="
+          getent hosts cq.wens.com.cn || echo "❌ DNS 解析失败"
+          echo
+          echo "===== 首页 ====="
+          curl -sS -o /dev/null \
+            -w "status=%{http_code}  dns=%{time_namelookup}s  connect=%{time_connect}s  total=%{time_total}s\n" \
+            --max-time 45 https://cq.wens.com.cn/ \
+            || echo "❌ 首页请求失败（curl 退出码 $?）"
+          echo
+          echo "===== 入口页 ====="
+          curl -sS -o /dev/null \
+            -w "status=%{http_code}  total=%{time_total}s\n" \
+            --max-time 45 "https://cq.wens.com.cn/mobile.html?form=nbj_user_mob_home" \
+            || echo "❌ 入口页请求失败（curl 退出码 $?）"
+
       - name: 准备 Python
         uses: actions/setup-python@v5
         with:
