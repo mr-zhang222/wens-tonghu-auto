@@ -1,0 +1,78 @@
+name: 同呼学习平台 · 自动刷课
+
+on:
+  schedule:
+    # 北京时间每天 07:30 开跑（GitHub 用 UTC，所以是 23:30）。
+    # 注意：Actions 的定时任务经常排队延迟几分钟到几十分钟，这属正常现象。
+    - cron: "30 23 * * *"
+  workflow_dispatch:
+    inputs:
+      inspect:
+        description: "只做一次页面勘察（截图 + DOM 快照），不刷视频"
+        type: boolean
+        default: false
+
+# 同一条流水线不并发，避免两个 runner 抢同一个账号
+concurrency:
+  group: wens-learn
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  learn:
+    runs-on: ubuntu-latest
+    # 单次最多跑 350 分钟，留点余量给 6 小时硬上限
+    timeout-minutes: 350
+
+    env:
+      WENS_LEARN_URL: ${{ vars.WENS_LEARN_URL }}
+      PLAYBACK_RATE: ${{ vars.PLAYBACK_RATE }}
+      MAX_MINUTES: ${{ vars.MAX_MINUTES }}
+      ARTIFACT_DIR: artifacts
+      # 快速模式（vars 不填则默认走真实播放）
+      FAST_MODE: ${{ vars.FAST_MODE }}
+      FAST_METHOD: ${{ vars.FAST_METHOD }}
+      SEEK_STEP_SECONDS: ${{ vars.SEEK_STEP_SECONDS }}
+      SEEK_INTERVAL_MS: ${{ vars.SEEK_INTERVAL_MS }}
+      FINAL_TAIL_SECONDS: ${{ vars.FINAL_TAIL_SECONDS }}
+      HEARTBEAT_STEP_SECONDS: ${{ vars.HEARTBEAT_STEP_SECONDS }}
+      HEARTBEAT_DELAY_MS: ${{ vars.HEARTBEAT_DELAY_MS }}
+      FAST_RATE: ${{ vars.FAST_RATE }}
+      MAX_VIDEO_MINUTES: ${{ vars.MAX_VIDEO_MINUTES }}
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # runner 自带 Google Chrome（含 H.264 解码），这里补齐 Chromium 与系统库做兜底
+          python -m playwright install --with-deps chromium
+
+      - name: 执行
+        env:
+          # 凭据只从 secret 读，不回显、不落盘到仓库
+          WENS_STORAGE_STATE: ${{ secrets.WENS_STORAGE_STATE }}
+          WENS_COOKIE: ${{ secrets.WENS_COOKIE }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+          INSPECT: "${{ github.event_name == 'workflow_dispatch' && inputs.inspect && '1' || '0' }}"
+        run: python -m src.main
+
+      - name: 上传勘察产物（截图 / DOM / 可点文案）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 7

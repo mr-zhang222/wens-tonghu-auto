@@ -1,0 +1,34 @@
+# 这张表只是给人看的说明。
+# 真正运行时所有配置都走环境变量 / GitHub Repository secrets & variables，
+# 目的是让凭据不落仓库。改配置请改 GitHub 里的 Settings，不要改这个文件。
+
+secrets:            # Settings → Secrets and variables → Actions → Secrets
+  WENS_STORAGE_STATE: "本机 local/export_login.py 生成的 login_state/storage_state.b64 全文"
+  WENS_COOKIE:        "可选，备用方案：DevTools 里复制的 Cookie 字符串"
+  FEISHU_WEBHOOK:     "飞书群自定义机器人的 Webhook 地址"
+  FEISHU_SECRET:      "可选，飞书机器人开了签名校验才需要"
+
+variables:          # Settings → Secrets and variables → Actions → Variables
+  WENS_LEARN_URL: "同呼学习平台的入口地址；不填则用代码里的同呼移动端默认入口"
+  PLAYBACK_RATE:  "倍速，默认 2.0；平台若校验观看时长，改成 1.0 最稳"
+  MAX_MINUTES:    "单次运行的时间预算（分钟），默认 180；超出的任务留到下次补做"
+
+  # —— 快速模式（FAST_MODE=1 才生效）——
+  # 2026-09 实测抓包：进度走 POST /form/batchInvokeAction.do?appId=nbj_portal&f=nbj_user_mob_course&ac=customEvent
+  # 表单 params=[{"methodName":"customEvent","args":["nbj_play","saveView","{\"currentTime\":..,\"type\":\"VIDEO\"}"]}]
+  # 但请求头里有 signature（前端私钥签名）和 kd-csrf-token —— 伪造请求体签名必失效，
+  # 所以默认走 seek：只拽 video.currentTime，上报由页面自己发，签名天然合法。
+  FAST_MODE:              "1 = 启用快速模式；不填 = 真实播放（最稳）"
+  FAST_METHOD:            "seek（默认，拽进度条）| replay（实验，重放请求，会被 signature 拒）"
+  SEEK_STEP_SECONDS:      "每次往前拽多少秒，默认 10；被平台卡就调小"
+  SEEK_INTERVAL_MS:       "两次拽之间等多久毫秒，默认 1200；给页面留出上报时间"
+  FINAL_TAIL_SECONDS:     "最后多少秒不跳、自然播完，默认 8；用来触发平台的播完逻辑"
+  HEARTBEAT_STEP_SECONDS: "仅 replay 模式用，默认 15"
+  HEARTBEAT_DELAY_MS:     "仅 replay 模式用，默认 80"
+  FAST_RATE:              "仅 replay 模式用：时间压缩倍率"
+  MAX_VIDEO_MINUTES:      "拿不到视频时长时的兜底时长（分钟），默认 45"
+
+behaviour:
+  order: "先查后做 —— 先扫出未学完的任务，再逐个刷，已完成的跳过"
+  idempotent: "true —— 跑三次和跑一次结果一样，多出来的是容错"
+  failure_policy: "单节课失败不影响整体结论，明细里单独标出来"

@@ -1,0 +1,9 @@
+# 凭据绝不进仓库
+artifacts/
+artifacts_*/
+storage_state.json
+*.har
+.env
+
+# 本机导出脚本的产物
+login_state/
