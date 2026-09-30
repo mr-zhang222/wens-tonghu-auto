@@ -62,6 +62,38 @@ git push -u origin main
 
 推送时会让你登录 GitHub（浏览器弹窗或粘贴 Personal Access Token）。
 
+### ⚠️ 两个必踩的坑（本机实测）
+
+**坑 1 · `workflow` 权限。** 如果推送报：
+
+```
+! [remote rejected] main -> main
+(refusing to allow an OAuth App to create or update workflow
+ `.github/workflows/daily.yml` without `workflow` scope)
+```
+
+这是 GitHub 的硬规则：token 必须带 `workflow` 权限才能创建/修改 `.github/workflows/` 下的文件
+（防绕过审批）。用 gh 登录的默认权限只有 `repo`/`read:org`/`gist`，**不含 workflow**。补上：
+
+```bash
+gh auth refresh -h github.com -s workflow
+```
+
+会再弹一次设备码，去 <https://github.com/login/device> 输码授权即可。之后 `gh auth status`
+应显示 `Token scopes: 'gist', 'read:org', 'repo', 'workflow'`。
+
+**坑 2 · 代理 + TLS 后端。** 本机直连 GitHub 不通，必须走本地代理；而 git 默认用 Windows
+自带的 schannel 做 TLS，穿本地代理会握手失败（报 `CONNECT tunnel failed, response 502`
+或 `schannel: failed to receive handshake`）。仓库级配置已写好，换台机器照抄这两行：
+
+```bash
+git config http.proxy http://127.0.0.1:57097   # 换成你实际的本地代理端口
+git config http.sslBackend openssl
+```
+
+即便这样，这台机器到 GitHub 仍有约 **3/8 的瞬时失败率**（代理抖动，curl 侧成功率 8/8
+说明代理本身没坏）。所以**推送失败先重跑一次**，通常第二次就过 —— 不是配置错了。
+
 > 提交用的是占位身份（`wens-tonghu-auto` + GitHub noreply 邮箱），先跑通再说。
 > 想换成你自己的，推之前执行：
 > ```bash
@@ -92,6 +124,16 @@ git ls-files | grep -E "login_state|storage_state|artifacts" || echo "干净：�
 > 填 `WENS_STORAGE_STATE` 时**整段复制粘贴**即可，粘贴时夹带的换行/空格不影响 ——
 > 代码会自动忽略并识别出这是 gzip 压缩过的登录态。
 > 若 GitHub 提示 “secret 太大”，说明你复制成未压缩的 `storage_state.b64` 了，换成 `.gz.b64` 那个。
+
+**更稳的写法（推荐）：用命令写，避免手动粘贴 18 KB 被截断**
+
+```bash
+./local/push_secret.sh            # 用已导出的 login_state/storage_state.gz.b64
+./local/push_secret.sh --re-export  # 顺带重新登录一次再推送
+```
+
+脚本会自动找到 gh（含 Windows 默认安装路径）、校验大小没超 48 KB、写入 secret 并回显列表。
+**每周刷新登录态就用它**，比在网页里粘贴可靠得多。
 
 **怎么拿飞书 Webhook**：打开你的飞书群 → 右上角设置 → 群机器人 → 添加机器人 → 自定义机器人 →
 起个名字 → 复制 Webhook 地址。若要安全设置，勾“签名校验”并把密钥一起填进 `FEISHU_SECRET`。
@@ -136,11 +178,20 @@ git ls-files | grep -E "login_state|storage_state|artifacts" || echo "干净：�
 |---|---|---|
 | `登录态失效，请重跑本机导出脚本` | cookie 过期（通常几天到两周） | 重做第 1 步，把新的 `storage_state.gz.b64` 覆盖 `WENS_STORAGE_STATE` |
 | GitHub 报错 `secret 太大` / 存不进去 | 复制成了未压缩的 `.b64`（139 KB > 48 KB 上限） | 改用 `storage_state.gz.b64`（18 KB） |
-| 报 `WENS_STORAGE_STATE 不是合法 base64` | 复制时截断/漏了字符 | 重新整段复制 `.gz.b64` 全文 |
+| 报 `WENS_STORAGE_STATE 不是合法 base64` | 复制时截断/漏了字符 | 重新整段复制 `.gz.b64` 全文，或改用 `local/push_secret.sh` 由命令写入 |
 | 一节课都没扫到 | 页面文案改版，关键字不再命中 | 跑一次 inspect，用 `inspect.json` 里的真实文案改 `src/learn_adapter.py` 顶部常量 |
 | 视频元素在但 `currentTime` 不动 | 用了不带 H.264 的 Chromium | 已默认优先真机 Chrome；runner 自带，一般不会遇到 |
 | Actions 跑两份/互相打架 | 上次没跑完又触发了一次 | 流水线已设并发锁，等它跑完即可 |
 | 定时任务突然不跑了 | 仓库 60 天不活跃被 GitHub 自动停用 | 进 Actions 页点一下 Enable，或随便 commit 一次 |
+
+**推送/登录阶段**（不在飞书里，出现在终端）：
+
+| 终端报错 | 原因 | 怎么办 |
+|---|---|---|
+| `refusing to allow an OAuth App to create or update workflow ... without 'workflow' scope` | token 缺 `workflow` 权限 | `gh auth refresh -h github.com -s workflow`，再去设备页授权一次 |
+| `CONNECT tunnel failed, response 502` / `schannel: failed to receive handshake` | git 用 Windows schannel 穿本地代理握手失败 | `git config http.sslBackend openssl` + `git config http.proxy <本地代理>` |
+| `Failed to authenticate via web browser: ... Bad Gateway` | 到 GitHub 的代理瞬时抖动 | 重跑命令（重试循环一般第 2~3 次成功） |
+| `could not read Username for 'https://github.com'` | 没配置凭据 | `gh auth setup-git` |
 
 ---
 

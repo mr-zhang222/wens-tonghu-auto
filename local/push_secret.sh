@@ -31,12 +31,28 @@ if [[ ! -s "$STATE_FILE" ]]; then
   exit 1
 fi
 
-if ! command -v gh >/dev/null 2>&1; then
+# 找 gh：优先 PATH，其次 Windows 默认安装位置（winget 装完不一定进当前 PATH）
+GH_BIN=""
+if command -v gh >/dev/null 2>&1; then
+  GH_BIN="$(command -v gh)"
+elif [[ -x "/c/Program Files/GitHub CLI/gh.exe" ]]; then
+  GH_BIN="/c/Program Files/GitHub CLI/gh.exe"
+elif [[ -x "/c/Program Files (x86)/GitHub CLI/gh.exe" ]]; then
+  GH_BIN="/c/Program Files (x86)/GitHub CLI/gh.exe"
+elif [[ -x "$LOCALAPPDATA/Microsoft/WinGet/Links/gh.exe" ]]; then
+  GH_BIN="$LOCALAPPDATA/Microsoft/WinGet/Links/gh.exe"
+fi
+
+if [[ -z "$GH_BIN" ]]; then
   echo "❌ 没找到 gh（GitHub CLI）。"
   echo "   Windows: winget install --id GitHub.cli    （装完要重开终端）"
   echo "   或改走网页手动路径：Settings → Secrets and variables → Actions"
   exit 1
 fi
+
+# 本机到 GitHub 需走代理，且 git/gh 的 TLS 后端有坑（详见 README 的排障段）
+export HTTPS_PROXY="${HTTPS_PROXY:-http://127.0.0.1:57097}"
+export HTTP_PROXY="${HTTP_PROXY:-http://127.0.0.1:57097}"
 
 SIZE=$(wc -c < "$STATE_FILE" | tr -d ' ')
 echo "==> 登录态：$STATE_FILE（${SIZE} 字节）"
@@ -48,12 +64,12 @@ if (( SIZE > 48 * 1024 )); then
 fi
 
 echo "==> 写入 secret WENS_STORAGE_STATE"
-gh secret set WENS_STORAGE_STATE < "$STATE_FILE"
+"$GH_BIN" secret set WENS_STORAGE_STATE < "$STATE_FILE"
 
 echo
 echo "==> 当前仓库的 secret / variable 一览"
-gh secret list || true
-gh variable list || true
+"$GH_BIN" secret list || true
+"$GH_BIN" variable list || true
 
 echo
 echo "✅ 完成。去 Actions 页手动触发一次确认能跑通。"
