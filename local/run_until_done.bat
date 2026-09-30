@@ -72,10 +72,10 @@ exit /b 0
 
 :failedround
 set /a FAILS+=1
-if %FAILS% GEQ 2 goto :gaveup
-echo [round %ROUND%] zero progress, cooling down 3 min then retrying (attempt %FAILS%/2) >> "local\logs\run.log"
-REM sleep 180s without depending on `timeout` interactivity
-ping -n 181 127.0.0.1 >nul
+if %FAILS% GEQ 3 goto :gaveup
+echo [round %ROUND%] zero progress, cooling down 20 min then retrying (attempt %FAILS%/3) >> "local\logs\run.log"
+REM sleep 20 min without depending on `timeout` interactivity
+ping -n 1201 127.0.0.1 >nul
 goto :loop
 
 :stopped

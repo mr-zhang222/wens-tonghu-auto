@@ -58,8 +58,11 @@ Register-ScheduledTask -TaskName "wens-tonghu-auto daily" -Action $action -Trigg
 
 **「刷完为止」循环模式**（`local\run_until_done.bat`，当前启用）：
 
-- 每轮 `MAX_MINUTES=100`，一轮结束检查 `local\logs\round.log`：
-  含「超出本次时间预算 / 留到下次」→ 自动接下一轮；否则（全部完成 / 有失败）停止。
+- 每轮 `MAX_MINUTES=100`，一轮结束由 `check_more.py` 给出三值判定：
+  - `MORE`（含「超出本次时间预算 / 留到下次」）→ 自动接下一轮；
+  - `DONE`（无待学 / 有完成进展）→ 循环成功结束；
+  - `FAILED`（零进展：0 完成、全部跳过或失败）→ **冷却 20 分钟再重试，
+    连续 3 轮零进展才放弃**（平台/CDN 可能瞬时限流，如「资源文件加载失败」）。
 - 上限：**6 轮**（≈10 小时）+ 任务 `ExecutionTimeLimit=12 小时` 双保险。
 - **随时叫停**：在项目下新建一个空文件 `local\STOP`，当前轮跑完即停：
   ```powershell
@@ -67,7 +70,10 @@ Register-ScheduledTask -TaskName "wens-tonghu-auto daily" -Action $action -Trigg
   ```
   （删除该文件即可恢复循环能力。）
 - 循环的结束标记写在 `run.log` 末尾：`[all-done]`（无待学）、`[stopped]`（手动叫停）、
-  `[max-rounds]`（达到轮数上限）、`[fatal]`（某轮异常退出，如登录态失效）。
+  `[max-rounds]`（达到轮数上限）、`[fatal]`（某轮异常退出，如登录态失效）、
+  `[failed-round]`（连续 3 轮零进展，放弃）。
+- ⚠️ **任务运行中不要编辑 `run_until_done.bat`**：cmd 按字节偏移逐行读 bat，
+  文件一变后续行可能解析错乱。要改就先 `Stop-ScheduledTask` 再改再启动。
 
 
 **改时间**（比如从 21:00 改成别的点）：
