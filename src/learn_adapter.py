@@ -311,8 +311,11 @@ class LearnAdapter:
                         f"{type(exc).__name__}: {exc}"[:200],
                     )
                 )
-                if not self.go_my_courses():  # 回到列表继续下一门
-                    break
+            # 无论成败，下一门前都必须回到课程列表，否则下一门会在
+            # 上一门的详情页里找卡片 → 全部级联「点不开」。
+            # （2026-10-01 实测：第 1 门是文档课失败后，其余 19 门全灭。）
+            if not self.go_my_courses():
+                break
         return results
 
     def _do_course(self, course: dict, deadline: float) -> TaskResult:
@@ -324,6 +327,10 @@ class LearnAdapter:
 
         lectures = self._list_lectures(stable=True)
         if not lectures:
+            if self._page_is_doc_course():
+                return TaskResult(
+                    label, "skipped", "文档型课件（无视频讲次），本脚本暂不支持，留待后续版本"
+                )
             return TaskResult(label, "failed", "课程目录里没解析出讲次（建议跑 INSPECT 看真实 DOM）")
 
         pending_idx = [i for i, lec in enumerate(lectures) if not lec["done"]]
@@ -371,6 +378,29 @@ class LearnAdapter:
                 watched_total,
             )
         return TaskResult(label, "failed", "，".join(detail_parts) or "未能推进任何讲次")
+
+    def _page_is_doc_course(self) -> bool:
+        """课程目录里只有「文档」条目、没有「视频」条目 → 文档型课程。
+
+        平台把课件分成 视频/文档 两类（接口字段 type: VIDEO/DOC）。
+        文档课没有可播放的视频讲次，现有流程无法推进。
+        """
+        try:
+            counts = self.page.evaluate(
+                r"""() => {
+                      let doc = 0, video = 0;
+                      for (const el of document.querySelectorAll('div,li,span,p')) {
+                        if (el.childElementCount) continue;
+                        const t = el.textContent.trim();
+                        if (t === '文档') doc++;
+                        else if (t === '视频') video++;
+                      }
+                      return {doc, video};
+                    }"""
+            )
+        except Exception:
+            return False
+        return bool(counts) and counts.get("doc", 0) > 0 and counts.get("video", 0) == 0
 
     def _open_course(self, title: str) -> bool:
         try:
