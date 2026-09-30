@@ -1,13 +1,17 @@
-"""Decide whether another round is needed (used by local/run_until_done.bat).
+"""Decide what the loop should do after one round (local/run_until_done.bat).
 
 Reads the LAST round's output (one round per file) and prints exactly one
-word: MORE (budget ran out with courses still pending) or DONE (nothing
-left, or something failed hard). ASCII output so the .bat can match it
-with plain `findstr /C:"MORE"`.
+word, ASCII only so the .bat can match it with plain findstr:
+
+  MORE    budget ran out while courses were still pending -> next round
+  DONE    nothing pending (or everything completed)        -> stop, success
+  FAILED  the round made no progress at all (0 done, and
+          everything skipped/failed)                       -> retry once
 """
 
 from __future__ import annotations
 
+import re
 import sys
 
 # Marks meaning "time budget ran out while courses were still pending".
@@ -16,8 +20,24 @@ MORE_MARKS = (
     "留到下次",          # same note, shorter wording
     "时间预算用尽",      # per-course summary note
 )
-# Explicit "nothing pending at all".
 DONE_MARKS = ("今日无待学任务",)
+
+HEADLINE_RE = re.compile(r"完成 (\d+)，跳过 (\d+)，失败 (\d+)")
+
+
+def classify(text: str) -> str:
+    if any(mark in text for mark in MORE_MARKS):
+        return "MORE"
+    if any(mark in text for mark in DONE_MARKS):
+        return "DONE"
+    m = HEADLINE_RE.search(text)
+    if m:
+        done, skipped, failed = (int(g) for g in m.groups())
+        if done == 0 and failed + skipped > 0:
+            # No budget markers + zero progress => something broke
+            # (page didn't render, clicks failed...). Retry, don't lie.
+            return "FAILED"
+    return "DONE"
 
 
 def main() -> None:
@@ -27,10 +47,7 @@ def main() -> None:
     except OSError:
         print("DONE")
         return
-    if any(mark in text for mark in MORE_MARKS):
-        print("MORE")
-    else:
-        print("DONE")
+    print(classify(text))
 
 
 if __name__ == "__main__":
