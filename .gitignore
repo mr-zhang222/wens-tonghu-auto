@@ -7,3 +7,7 @@ storage_state.json
 
 # 本机导出脚本的产物
 login_state/
+
+# 本机定时任务的运行日志
+local/logs/
+__pycache__/

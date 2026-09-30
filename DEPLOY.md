@@ -1,11 +1,74 @@
 # 部署手册（Windows · 从零到跑起来）
 
-按顺序做，全程约 15 分钟。命令都是在 **Git Bash** 里执行（你现在的终端就是这个），
-从 `wens-tonghu-auto` 目录开始。
+## ⚠️ 先说结论：GitHub Actions 这条路本项目走不通
 
-> 本机环境我已经替你备好了：Python 虚拟环境 + Playwright 1.63 都已装好，你不需要再执行 `pip install` 那一串。
-> 浏览器直接用你机器上的 **Microsoft Edge**（和 Chrome 同源、自带 H.264 解码），所以也**不需要下载 Chromium**
-> —— 脚本会按 `Chrome → Edge → 自带 Chromium` 的顺序自动挑一个能用的。
+2026-10-01 云端实测（workflow run 36749808897，预检步骤）：
+
+```
+===== DNS 解析 =====
+219.131.174.220 n-cq10.wens.com.cn cq.wens.com.cn     ← 解析正常
+===== 首页 =====
+curl: (28) Connection timed out after 45002 milliseconds
+status=000  dns=0.054253s  connect=0.000000s  total=45.002462s
+                           ^^^^^^^^^^^^^^^^^^ TCP 连接从未建立
+```
+
+**Diagnosis：DNS 通、TCP 不通。** GitHub 的托管 runner 位于境外（Azure），
+而 `cq.wens.com.cn` 只对国内网络开放 —— 这是物理链路问题，
+**不是凭据问题、不是代码问题，重试和重跑导出脚本都不会变好。**
+
+→ **执行环境必须换成国内常开设备。** 代码、仓库、secret 全部可复用，只换"谁来跑"。
+→ 推荐直接看下面「**第 0 步 · 在本机定时跑（当前采用）**」，GitHub 那套可留作代码备份。
+
+---
+
+## 第 0 步 · 在本机定时跑（推荐，已验证可用）
+
+本机直连同呼流畅（且不需要代理），配合 Edge 自带 H.264 解码，**已实测把课程从 30% 推到 90%+**。
+
+**手动跑一次**（勘察模式，不刷课，用来确认环境正常）：
+
+```bash
+cd /c/Users/mrzhang/WorkBuddy/2026-09-30-22-08-25/wens-tonghu-auto
+INSPECT=1 cmd //c "local\\run_daily.bat"
+tail -30 local/logs/run.log
+```
+
+**正式刷课**（去掉 `INSPECT=1` 即可）：
+
+```bash
+cmd //c "local\\run_daily.bat"
+```
+
+日志写在 `local/logs/run.log`（UTF-8，已强制编码，不会乱码）。
+
+**注册成每天自动跑的任务计划**（在 PowerShell 里执行一次，不需要管理员）：
+
+```powershell
+schtasks /Create /TN "wens-tonghu-auto daily" /SC DAILY /ST 07:30 `
+  /TR "\"C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\run_daily.bat\"" `
+  /F
+```
+
+管理它：
+
+```powershell
+schtasks /Query /TN "wens-tonghu-auto daily" /V /FO LIST   # 查看
+schtasks /Run   /TN "wens-tonghu-auto daily"               # 立刻跑一次
+schtasks /Delete /TN "wens-tonghu-auto daily" /F           # 删除
+```
+
+> **注意**：任务计划默认"错过了就不跑"。如果你 07:30 电脑没开机，那天就不会执行。
+> 想要补跑，勾选任务的「如果错过计划的开始时间，请尽快启动任务」，
+> 或者把时间设在你基本一定开机的时间点。本项目是**幂等**的，
+> 哪天多跑一次、晚跑一次都不会出错。
+
+**另外两个可行方案**（都需要一台国内常开设备，你没有的话就选上面这个）：
+
+| 方案 | 需要什么 | 特点 |
+|---|---|---|
+| 青龙面板 | 一台国内常开设备（NAS / 软路由 / 旧电脑 / 国内服务器） | 7×24 不依赖你的主力机；网页管任务、看日志 |
+| 自托管 runner | 同上 + 装 GitHub runner | 仍用 GitHub 的触发和日志界面，执行在你自己机器上 |
 
 ---
 
@@ -37,7 +100,11 @@ cd /c/Users/mrzhang/WorkBuddy/2026-09-30-22-08-25/wens-tonghu-auto
 
 ---
 
-## 第 2 步 · 建 GitHub 仓库
+## 第 2 步 · 建 GitHub 仓库（可选，仅作代码备份）
+
+> 因为上面那条"云端连不上同呼"的结论，第 2~5 步**不再是跑起来的必要步骤**。
+> 仍建议保留这个仓库：代码有云端备份、换机器时 clone 即可。
+> 已经建好的 `mr-zhang222/wens-tonghu-auto` 就继续用着，不用管它跑不跑。
 
 1. 打开 <https://github.com/new>；
 2. Repository name 填 `wens-tonghu-auto`；
