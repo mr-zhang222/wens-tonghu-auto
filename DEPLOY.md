@@ -46,17 +46,29 @@ cmd //c "local\\run_daily.bat"
 
 ```powershell
 # 方法一（当前使用的方法，推荐）：Set-ScheduledTask
-$action  = New-ScheduledTaskAction -Execute "C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\run_daily.bat" `
+# 当前动作指向 local\run_until_done.bat（循环刷到平台无待学为止），
+# 想改回「每天只跑一轮」就把 Execute 换回 local\run_daily.bat。
+$action  = New-ScheduledTaskAction -Execute "C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\run_until_done.bat" `
            -WorkingDirectory "C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto"
 $trigger = New-ScheduledTaskTrigger -Daily -At "21:00"
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 12)
 Register-ScheduledTask -TaskName "wens-tonghu-auto daily" -Action $action -Trigger $trigger -Settings $settings -Force
-
-# 方法二（等价写法）：
-schtasks /Create /TN "wens-tonghu-auto daily" /SC DAILY /ST 21:00 `
-  /TR "\"C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\run_daily.bat\"" `
-  /F
 ```
+
+**「刷完为止」循环模式**（`local\run_until_done.bat`，当前启用）：
+
+- 每轮 `MAX_MINUTES=100`，一轮结束检查 `local\logs\round.log`：
+  含「超出本次时间预算 / 留到下次」→ 自动接下一轮；否则（全部完成 / 有失败）停止。
+- 上限：**6 轮**（≈10 小时）+ 任务 `ExecutionTimeLimit=12 小时` 双保险。
+- **随时叫停**：在项目下新建一个空文件 `local\STOP`，当前轮跑完即停：
+  ```powershell
+  New-Item -ItemType File -Force C:\Users\mrzhang\WorkBuddy\2026-09-30-22-08-25\wens-tonghu-auto\local\STOP
+  ```
+  （删除该文件即可恢复循环能力。）
+- 循环的结束标记写在 `run.log` 末尾：`[all-done]`（无待学）、`[stopped]`（手动叫停）、
+  `[max-rounds]`（达到轮数上限）、`[fatal]`（某轮异常退出，如登录态失效）。
+
 
 **改时间**（比如从 21:00 改成别的点）：
 
