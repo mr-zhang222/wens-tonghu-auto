@@ -2,9 +2,11 @@ name: 同呼学习平台 · 自动刷课
 
 on:
   schedule:
-    # 北京时间每天 07:30 开跑（GitHub 用 UTC，所以是 23:30）。
+    # 北京时间每天 21:00 开跑（GitHub 用 UTC，所以是 13:00）。
     # 注意：Actions 的定时任务经常排队延迟几分钟到几十分钟，这属正常现象。
-    - cron: "30 23 * * *"
+    # ⚠️ 现状：该路径已实测不可用（runner 在境外，连不上 cq.wens.com.cn），
+    #    实际执行走本机 Windows 计划任务，见 DEPLOY.md「第 2 步」。
+    - cron: "0 13 * * *"
   workflow_dispatch:
     inputs:
       inspect:
