@@ -11,6 +11,7 @@ import base64
 import binascii
 import gzip
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -122,11 +123,18 @@ def load_settings() -> Settings:
 
     # 优先用 storageState（Playwright 全量登录态，最完整）；
     # 没有就用 WENS_COOKIE（手动从 DevTools 复制的 Cookie 字符串，最省事）。
-    storage_state_path = artifact_dir / "storage_state.json"
+    #
+    # ⚠️ 从 secret 解出来的登录态**绝不能落在 artifact_dir**：流水线最后会把
+    #    artifacts/ 整个上传成产物，落在那儿就等于把登录态上传到仓库。
+    #    所以写到系统临时目录（runner 用完即弃）。
+    state_dir = Path(tempfile.gettempdir()) / "wens-tonghu-auto"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    storage_state_path = state_dir / "storage_state.json"
+
     raw_b64 = _s("WENS_STORAGE_STATE")
     if raw_b64:
         storage_state_path.write_bytes(decode_storage_state(raw_b64))
-    elif not storage_state_path.exists():
+    else:
         # 本机跑的时候，直接复用 export_login.py 导出的那份，省得手动复制
         local_state = workspace / "login_state" / "storage_state.json"
         if local_state.exists():

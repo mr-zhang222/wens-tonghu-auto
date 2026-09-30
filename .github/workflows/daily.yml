@@ -73,6 +73,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: artifacts
-          path: artifacts/
+          # 明确排除登录态：登录态只从 secret 读、只落系统临时目录，
+          # 这里再排一次是双保险，防止以后改动把凭据漏进产物里。
+          path: |
+            artifacts/**
+            !artifacts/storage_state.json
+            !artifacts/*.b64
+            !artifacts/cookie.txt
           if-no-files-found: ignore
           retention-days: 7
