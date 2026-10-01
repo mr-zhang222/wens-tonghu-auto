@@ -303,12 +303,12 @@ class LearnAdapter:
                 results.append(self._do_course(course, deadline))
             except NotLoggedIn:
                 raise
-            except Exception as exc:  # 单点失败不污染整体结论
+            except Exception as exc:  # 播放失败 → 跳过该门，继续下一门
                 results.append(
                     TaskResult(
                         f'{course["title"]}（进度 {course["percent"]}%）',
-                        "failed",
-                        f"{type(exc).__name__}: {exc}"[:200],
+                        "skipped",
+                        f"播放失败，已跳过（{type(exc).__name__}: {exc}）"[:200],
                     )
                 )
             # 无论成败，下一门前都必须回到课程列表，否则下一门会在
@@ -323,15 +323,16 @@ class LearnAdapter:
         label = f"{title}（进度 {course['percent']}%）"
 
         if not self._open_course(title):
-            return TaskResult(label, "failed", "点不开课程卡片（文案可能被截断或结构变化）")
+            # 打不开就跳过这门，不做任何重试纠缠
+            return TaskResult(label, "skipped", "点不开课程卡片，已跳过")
 
         lectures = self._list_lectures(stable=True)
         if not lectures:
             if self._page_is_doc_course():
                 return TaskResult(
-                    label, "skipped", "文档型课件（无视频讲次），本脚本暂不支持，留待后续版本"
+                    label, "skipped", "文档型课件（无视频讲次），本脚本暂不支持，已跳过"
                 )
-            return TaskResult(label, "failed", "课程目录里没解析出讲次（建议跑 INSPECT 看真实 DOM）")
+            return TaskResult(label, "skipped", "课程目录里没解析出讲次，已跳过")
 
         pending_idx = [i for i, lec in enumerate(lectures) if not lec["done"]]
         notes: list[str] = []
@@ -377,7 +378,12 @@ class LearnAdapter:
                 "，".join(detail_parts) + "（总进度可能有结转延迟，下次运行自动复查）",
                 watched_total,
             )
-        return TaskResult(label, "failed", "，".join(detail_parts) or "未能推进任何讲次")
+        # 一讲都没推进 → 视为播放失败，跳过这门（不再冷却重试）
+        return TaskResult(
+            label,
+            "skipped",
+            "播放失败，已跳过（" + ("，".join(detail_parts) or "未能推进任何讲次") + "）",
+        )
 
     def _page_is_doc_course(self) -> bool:
         """课程目录里只有「文档」条目、没有「视频」条目 → 文档型课程。

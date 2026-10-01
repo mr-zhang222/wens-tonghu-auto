@@ -5,8 +5,9 @@ word, ASCII only so the .bat can match it with plain findstr:
 
   MORE    budget ran out while courses were still pending -> next round
   DONE    nothing pending (or everything completed)        -> stop, success
-  FAILED  the round made no progress at all (0 done, and
-          everything skipped/failed)                       -> retry once
+  FAILED  the round made zero progress (0 done, everything
+          skipped/failed) -> stop immediately, no cooldown retry
+          (user rule 2026-10-01: playback failures are skipped, not retried)
 """
 
 from __future__ import annotations

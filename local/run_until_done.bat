@@ -6,8 +6,8 @@ REM
 REM Verdict per round (printed by check_more.py, ASCII only):
 REM   MORE   -> budget exhausted with pending courses, next round
 REM   DONE   -> nothing pending, loop finished successfully
-REM   FAILED -> a round made zero progress (transient breakage?),
-REM             cool down 3 minutes and retry, max 2 consecutive
+REM   FAILED -> a round made zero progress; skip-and-stop immediately
+REM             (user rule: playback failures are skipped, never retried)
 REM
 REM Kill switches (any one of these ends the loop):
 REM   * create an empty file  local\STOP
@@ -42,7 +42,6 @@ if not exist "%PYEXE%" (
 if not exist "local\logs" mkdir "local\logs"
 
 set ROUND=0
-set FAILS=0
 
 :loop
 set /a ROUND+=1
@@ -60,7 +59,6 @@ if not "%RC%"=="0" goto :fatal
 "%PYEXE%" local\check_more.py "local\logs\round.log" > "local\logs\verdict.txt" 2>&1
 findstr /C:"MORE" "local\logs\verdict.txt" >nul
 if not errorlevel 1 (
-  set FAILS=0
   echo [round %ROUND%] budget exhausted with courses pending, next round >> "local\logs\run.log"
   goto :loop
 )
@@ -71,12 +69,8 @@ echo [all-done] %date% %time% no pending courses left >> "local\logs\run.log"
 exit /b 0
 
 :failedround
-set /a FAILS+=1
-if %FAILS% GEQ 3 goto :gaveup
-echo [round %ROUND%] zero progress, cooling down 20 min then retrying (attempt %FAILS%/3) >> "local\logs\run.log"
-REM sleep 20 min without depending on `timeout` interactivity
-ping -n 1201 127.0.0.1 >nul
-goto :loop
+echo [failed-round] %date% %time% zero progress this round, skipping (no retry) >> "local\logs\run.log"
+exit /b 2
 
 :stopped
 echo [stopped] %date% %time% local\STOP marker found >> "local\logs\run.log"
@@ -85,10 +79,6 @@ exit /b 0
 :fatal
 echo [fatal] %date% %time% round %ROUND% exited with code %RC%, aborting loop >> "local\logs\run.log"
 exit /b %RC%
-
-:gaveup
-echo [failed-round] %date% %time% two consecutive rounds with zero progress, giving up >> "local\logs\run.log"
-exit /b 2
 
 :maxrounds
 echo [max-rounds] %date% %time% reached 6 rounds cap >> "local\logs\run.log"
